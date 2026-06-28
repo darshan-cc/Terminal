@@ -88,72 +88,10 @@ export async function pushFileToGitHub(fileName, content) {
     }
 }
 
-export async function pullFileFromGitHub(fileName) {
-    const rawToken = localStorage.getItem('user');
-    const rawUsername = localStorage.getItem('github_username');
-    const rawRepo = localStorage.getItem('repository');
-
-    if (!rawToken || !rawUsername || !rawRepo) return null;
-    if (!AUTH_TOKEN_REGEX.test(rawToken) || !REPO_NAME_REGEX.test(rawRepo)) return null;
-    if (!SAFE_FILE_NAME_REGEX.test(fileName) || fileName.includes('..')) return null;
-
-    const username = encodeURIComponent(rawUsername);
-    const repo = encodeURIComponent(rawRepo);
-    const safeFileName = encodeURIComponent(fileName);
-
-    // CRITICAL: Double-check that this uses backticks (`) and starts with https://
-    const apiPath = `https://api.github.com/repos/${username}/${repo}/contents/${safeFileName}`;
-
-    try {
-        const res = await fetch(apiPath, {
-            method: 'GET',
-            headers: { 
-                'Authorization': `Bearer ${rawToken}`,
-                'Accept': 'application/vnd.github+json'
-            }
-        });
-
-        if (!res.ok) {
-            if (res.status === 404) {
-                print(`error: file '${fileName}' does not exist yet in repo '${rawRepo}'. run 'save' first.`);
-            } else if (res.status === 403) {
-                print("error: github access forbidden (403). check token permissions.");
-            } else {
-                print(`error: pull failed with HTTP status ${res.status}.`);
-            }
-            return null;
-        }
-
-        // Safety Check: Verify if we actually received JSON data
-        const contentType = res.headers.get("content-type");
-        if (contentType && !contentType.includes("application/json")) {
-            const badText = await res.text();
-            print(`error: Connected to local server fallback instead of GitHub API. Starts with: "${badText.substring(0, 25)}"`);
-            return null;
-        }
-
-        const data = await res.json();
-        if (data && typeof data.content === 'string') {
-            const cleanedBase64 = data.content.replace(/\s/g, '');
-            const binaryString = atob(cleanedBase64);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-            }
-            return new TextDecoder().decode(bytes);
-        }
-        return null;
-    } catch (e) {
-        print(`error: networking error during pull connection: ${e.message}`);
-        return null;
-    }
-}
-
 const githubTool = {
     helpText: "configure cloud sync backups. commands: login/token, repo/name, confirm, logout",
     prompt: "github>",
     sync: pushFileToGitHub,
-    pull: pullFileFromGitHub,
     
     onEnter: async () => {
         print("system: github workspace mode activated.");

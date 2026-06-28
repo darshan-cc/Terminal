@@ -79,43 +79,6 @@ async function handleGlobalSave() {
     }
 }
 
-async function handleToolPull(modeName) {
-    const activeTool = registry[modeName];
-    if (!activeTool) return;
-
-    let filename = '';
-    if (modeName === 'note') filename = 'note.txt';
-    else if (modeName === 'calculator') filename = 'calculator.txt';
-    else if (modeName === 'weather') filename = 'weather.csv';
-    else if (modeName === 'html') filename = 'index.html';
-
-    if (!filename) {
-        print(`system: no cloud file mapping found for tool "${modeName}".`);
-        return;
-    }
-
-    const token = localStorage.getItem('user');
-    const repo = localStorage.getItem('repository');
-
-    if (token && repo && registry['github'] && typeof registry['github'].pull === 'function') {
-        print(`system: pulling ${filename} from your repository [${repo}]...`);
-        const content = await registry['github'].pull(filename);
-        if (content !== null && content !== undefined) {
-            print(`system: ${filename} pulled and loaded successfully.`);
-            usedToolsInSession.add(modeName);
-            if (typeof activeTool.loadPulled === 'function') {
-                await activeTool.loadPulled(content);
-            } else if (typeof activeTool.handleInput === 'function') {
-                await activeTool.handleInput(content);
-            }
-        } else {
-            print(`error: failed to pull ${filename} from GitHub.`);
-        }
-    } else {
-        print("warning: GitHub sync environment not configured or pull method unavailable.");
-    }
-}
-
 async function download(content, filename) {
     const token = localStorage.getItem('user');
     const repo = localStorage.getItem('repository');
@@ -224,9 +187,6 @@ if (cmdInput) {
                     if (input.trim().toLowerCase() === 'save') {
                         print(`${activeTool.prompt || ''}${input.toLowerCase()}`);
                         await handleGlobalSave();
-                    } else if (input.trim().toLowerCase() === 'pull') {
-                        print(`${activeTool.prompt || ''}${input.toLowerCase()}`);
-                        await handleToolPull(currentMode);
                     } else if (typeof activeTool.handleInput === 'function') {
                         activeTool.handleInput(input);
                     }
@@ -237,72 +197,6 @@ if (cmdInput) {
             print(`${getSystemPrompt()}${input.toLowerCase()}`);
             const command = input.trim().toLowerCase();
             const baseCommand = command.split('/')[0];
-
-            if (baseCommand === 'end') {
-                const targetTool = command.split('/')[1];
-                if (!targetTool) {
-                    usedToolsInSession.clear();
-                    Object.keys(registry).forEach(toolName => {
-                        if (registry[toolName] && typeof registry[toolName].clearBuffer === 'function') {
-                            registry[toolName].clearBuffer();
-                        }
-                    });
-                    print("system: all active tool session states and tracking logs have been completely wiped.");
-                } else {
-                    if (usedToolsInSession.has(targetTool)) {
-                        usedToolsInSession.delete(targetTool);
-                        if (registry[targetTool] && typeof registry[targetTool].clearBuffer === 'function') {
-                            registry[targetTool].clearBuffer();
-                        }
-                        print(`system: session memory logs for [${targetTool}] have been closed and destroyed.`);
-                    } else {
-                        print(`warning: no active session trace or buffer records found for tool "${targetTool}".`);
-                    }
-                }
-                return;
-            }
-
-            if (baseCommand === 'pull') {
-                const targetTool = command.split('/')[1];
-                if (!targetTool) {
-                    await handleToolPull('note');
-                    await handleToolPull('calculator');
-                    await handleToolPull('weather');
-                    await handleToolPull('html');
-                } else {
-                    if (registry[targetTool]) {
-                        await handleToolPull(targetTool);
-                    } else {
-                        print(`error: unrecognized tool "${targetTool}" for pull command.`);
-                    }
-                }
-                return;
-            }
-
-            if (baseCommand === 'edit') {
-                const targetTool = command.split('/')[1];
-                if (!targetTool) {
-                    print("error: specify a tool to edit, e.g. edit/note or edit/html");
-                    return;
-                }
-                const tool = registry[targetTool];
-                if (!tool || typeof tool.loadPulled !== 'function' || typeof tool.getLines !== 'function') {
-                    print(`error: "${targetTool}" does not support edit mode.`);
-                    return;
-                }
-
-                usedToolsInSession.add(targetTool);
-                setMode(targetTool, tool.prompt || "");
-
-                const existing = tool.getLines();
-                if (existing && existing.trim() !== '') {
-                    print(`system: entering ${targetTool} edit mode — existing content loaded below.`);
-                    await tool.loadPulled(existing);
-                } else {
-                    print(`system: entering ${targetTool} edit mode — buffer is currently empty.`);
-                }
-                return;
-            }
 
             if (command === 'help') {
                 print("available core commands:");
@@ -318,8 +212,6 @@ if (cmdInput) {
                 if (outputDiv) outputDiv.textContent = '';
             } else if (command === 'save') {
                 await handleGlobalSave();
-            } else if (command === 'hello') {
-                print('hello, this is darshseraphic, nice to meet you!');
             } else if (registry[baseCommand]) {
                 usedToolsInSession.add(baseCommand);
                 setMode(baseCommand, registry[baseCommand].prompt || "");
