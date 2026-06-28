@@ -1,6 +1,8 @@
 import './main.js';
 
 const tools = [
+    'note.js',
+    'calculator.js',
     'weather.js',
     'github.js',
     'html.js',
